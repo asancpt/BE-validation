@@ -1,0 +1,3 @@
+
+report:
+	Rscript index.R
