@@ -1,0 +1,111 @@
+---
+title: "Validation of Bioequivalence Test Performed by BE R package"
+author: "Sungpil Han <shan@acp.kr>"
+date: "`r Sys.Date()`"
+#bibliography: ['manual.bib', 'packages.bib']
+bibliography: 'packages.bib'
+always_allow_html: yes
+header-includes:
+  - \usepackage{textcomp}
+output: 
+  bookdown::pdf_document2: 
+    df_print: "kable"
+  pdf_document: default
+---
+
+# Introduction
+
+BE R package [@R-BE] can conduct a noncompartmental analysis as similar as possible to the most widely used commercial software for pharmacokinetic analysis, i.e. [Phoenix^®^   WinNonlin^®^](https://www.certara.com/software/pkpd-modeling-and-simulation/phoenix-winnonlin/).
+This document provides validation of noncompartmental analysis performed by BE R package version `r packageVersion("BE")` as compared to the results from the commercial software, SAS^®^ version 9.4.
+
+# Results
+
+A function, `Equal()` will return `TRUE` if there is no difference between results from NonCompart and WinNonlin.
+
+```{r setup}
+library(BE) # install.packages("BE", repos="http://r.acr.kr")
+library(tidyverse)
+library(knitr)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+## AUClast
+
+```{r}
+BE::test2x2(NCAResult4BE, "AUClast")
+```
+
+## Cmax
+
+```{r}
+BE::test2x2(NCAResult4BE, "Cmax")
+
+results_Cmax <- BE::test2x2(NCAResult4BE, "Cmax")
+ls(results_Cmax)
+results_Cmax$`90% Confidence Interval of Geometric Mean Ratio (T/R)` %>% 
+  as.tibble(rownames = row.names(.))
+```
+
+### PROC GLM
+
+```{r, message = FALSE}
+gather_sas <- function(df){
+  df %>% 
+    gather('parameter', 'value')
+}
+read_csv('sas/proc-glm.csv') %>% 
+  gather_sas()
+```
+
+
+### PROC MIXED
+
+```{r}
+read_csv('sas/proc-mixed.csv') %>% 
+  gather_sas()
+```
+
+## Tmax
+
+```{r}
+BE::test2x2(NCAResult4BE, "Tmax")
+```
+
+```{r include = FALSE, eval = FALSE}
+#print(test2x2(NCAResult4BE, "AUClast"), na.print="") 
+#print(test2x2(NCAResult4BE, "Cmax"), na.print="") 
+# BE::be2x2(NCAResult4BE, c("AUClast", "Cmax", "Tmax"), rtfName="docs/report.rtf")
+```
+
+
+# SAS
+
+```{bash}
+cat sas/sas-be-model-2.sas
+```
+
+\pagebreak
+
+# (APPENDIX) Appendix {-}
+
+# Raw
+
+```{r, echo = FALSE}
+knitr::kable(NCAResult4BE, 
+             caption = 'Description of settings for the noncompartmental analysis performed in WinNonlin and links to the raw data', 
+             booktabs = TRUE, format = 'pandoc')
+```
+
+
+# Session Information
+
+```{r}
+devtools::session_info()
+```
+
+# References {-}
+
+```{r include = FALSE}
+library(BE)
+knitr::write_bib(file = 'packages.bib')
+```
