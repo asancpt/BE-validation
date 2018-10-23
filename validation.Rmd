@@ -2,8 +2,8 @@
 title: "Validation of Bioequivalence Test Performed by BE R package"
 author: "Sungpil Han <shan@acp.kr>"
 date: "`r Sys.Date()`"
-#bibliography: ['manual.bib', 'packages.bib']
-bibliography: 'packages.bib'
+bibliography: ['manual.bib', 'packages.bib']
+#bibliography: 'packages.bib'
 always_allow_html: yes
 header-includes:
   - \usepackage{textcomp}
@@ -13,78 +13,138 @@ output:
   pdf_document: default
 ---
 
+```{r include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+
 # Introduction
 
-BE R package [@R-BE] can conduct a noncompartmental analysis as similar as possible to the most widely used commercial software for pharmacokinetic analysis, i.e. [Phoenix^®^   WinNonlin^®^](https://www.certara.com/software/pkpd-modeling-and-simulation/phoenix-winnonlin/).
-This document provides validation of noncompartmental analysis performed by BE R package version `r packageVersion("BE")` as compared to the results from the commercial software, SAS^®^ version 9.4.
+`BE` R package [@R-BE] can analyze bioequivalence study data with industrial strength. 
+The current version `BE` performs bioequivalency tests for several variables of a 2x2 crossover study in a data file.
+To establish BE, the calculated confidence interval should fall within a BE limit, usually 80-125% for the ratio of the product averages. [@fda;@chow;@hauschke]
+In this document, the author performed validation of bioequivalence test performed by `BE` R package.
 
-# Results
+\pagebreak
 
-A function, `Equal()` will return `TRUE` if there is no difference between results from NonCompart and WinNonlin.
+# Methods
 
-```{r setup}
-library(BE) # install.packages("BE", repos="http://r.acr.kr")
-library(tidyverse)
-library(knitr)
-knitr::opts_chunk$set(message = FALSE)
+The required packages are following. 
+
+```{r setup, message = FALSE}
+library(BE)         # install.packages("BE", repos="http://r.acr.kr")
+library(tidyverse)  # install.packages("tidyverse")
 ```
 
-## AUClast
+## Calculation `BE`
+
+`BE::test2x2()` function was used to calculated the 90% confidence interval.
 
 ```{r}
-BE::test2x2(NCAResult4BE, "AUClast")
+Cmax_R_BE <- BE::test2x2(NCAResult4BE, "Cmax")[[4]] %>% 
+  as.tibble() %>% 
+  mutate(Analysis = 'R: BE package') %>% 
+  select(Analysis, everything())
+
+AUClast_R_BE <- BE::test2x2(NCAResult4BE, "AUClast")[[4]] %>% 
+  as.tibble() %>% 
+  mutate(Analysis = 'R: BE package') %>% 
+  select(Analysis, everything())
 ```
 
-## Cmax
+## Calculation `SAS`
+
+`SAS PROC GLM` and `SAS PROC MIXED` in SAS version 9.0 with SEQ (sequence), TRT (treatment), SUBJ (subject), PRD (period) variables, and LNAUCL or LNCMAX denoting the response measure.  
+A part of examplary SAS program statement is following and the full SAS scripts are appended in Appendix A.
+
+```r
+PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
+CLASS SEQ PRD TRT SUBJ;
+MODEL LNAUCL = SEQ SUBJ(SEQ) PRD TRT;
+RANDOM SUBJ(SEQ)/TEST;
+LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
+```
+
+```r
+PROC MIXED DATA=BE; /* MIXED uses all data. */
+CLASS SEQ TRT SUBJ PRD;
+MODEL LNAUCL = SEQ PRD TRT;
+RANDOM SUBJ(SEQ);
+ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1;
+ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
+```
+
+A function, `tab_sas_proc_results()` reads SAS analysis results exported to Microsoft Excel files (`.xls`) and converted to comma separated version file (`.csv`). It returns a data frame of 90% confidence interval calculated either `PROC GLM` or `PROC MIXED` in SAS version 9.0.
 
 ```{r}
-BE::test2x2(NCAResult4BE, "Cmax")
-
-results_Cmax <- BE::test2x2(NCAResult4BE, "Cmax")
-ls(results_Cmax)
-results_Cmax$`90% Confidence Interval of Geometric Mean Ratio (T/R)` %>% 
-  as.tibble(rownames = row.names(.))
-```
-
-### PROC GLM
-
-```{r, message = FALSE}
-gather_sas <- function(df){
-  df %>% 
-    gather('parameter', 'value')
+tab_sas_proc_results <- function(filename, skip_no, analysis_name){
+  read_lines(filename, skip = skip_no, n_max = 2) %>% 
+  paste(collapse='\n') %>% read_csv() %>% 
+  mutate(Analysis = analysis_name) %>% 
+  select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
 }
-read_csv('sas/proc-glm.csv') %>% 
-  gather_sas()
-```
 
-
-### PROC MIXED
-
-```{r}
-read_csv('sas/proc-mixed.csv') %>% 
-  gather_sas()
-```
-
-## Tmax
-
-```{r}
-BE::test2x2(NCAResult4BE, "Tmax")
-```
-
-```{r include = FALSE, eval = FALSE}
-#print(test2x2(NCAResult4BE, "AUClast"), na.print="") 
-#print(test2x2(NCAResult4BE, "Cmax"), na.print="") 
-# BE::be2x2(NCAResult4BE, c("AUClast", "Cmax", "Tmax"), rtfName="docs/report.rtf")
-```
-
-
-# SAS
-
-```{bash}
-cat sas/sas-be-model-2.sas
 ```
 
 \pagebreak
+
+# Results
+
+## C~max~
+
+Dataset, `NCAResult4BE` is shown in Appendix 1.
+
+Comparison between BE and SAS is shown in Table \@ref(tab:tabcmax).
+
+```{r tabcmax}
+Cmax_proc_glm <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
+                                      skip = 206, 'SAS: PROC GLM')
+Cmax_proc_mixed <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
+                                        skip = 278, 'SAS: PROC MIXED')
+
+bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed) %>% 
+  kable(longtable = TRUE, booktabs = TRUE, caption = 'Cmax', digits = 5)
+```
+
+## AUC~last~
+
+Comparison between BE and SAS is shown in Table \@ref(tab:tabauclast).
+
+
+```{r tabauclast}
+AUClast_proc_glm <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
+                                         skip = 206, 'SAS: PROC GLM')
+AUClast_proc_mixed <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
+                                           skip = 278, 'SAS: PROC MIXED')
+
+bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed) %>% 
+  kable(longtable = TRUE, booktabs = TRUE, caption = 'AUClast', digits = 5)
+```
+
+\pagebreak
+
+# Conclusion 
+
+*There is no discrepancy* between results from BE and SAS. 
+We also performed multiple analyses with the real clinical trial datasets and have found no differences (data not shown: confidential).
+Noncompartmental analysis performed by the open-source R package, NonCompart can be **qualified and validated** enough to acquire the identical results of the commercial software, WinNonlin.
+
+*Please report issues regarding validation of the R package to <https://github.com/asancpt/NonCompart-tests/issues>.*
+
+------
+
+**Affiliation**:  
+Sungpil Han  
+M.D/Ph.D, Resident  
+Department of Clinical Pharmacology and Therapeutics,  
+Asan Medical Center, University of Ulsan,  
+Seoul 05505, Republic of Korea  
+E-mail: shan@acp.kr  
+URL: www.github.com/shanmdphd
+
+\pagebreak
+
 
 # (APPENDIX) Appendix {-}
 
@@ -96,6 +156,32 @@ knitr::kable(NCAResult4BE,
              booktabs = TRUE, format = 'pandoc')
 ```
 
+\pagebreak
+
+# SAS Scripts and results
+
+To run these scripts, the dataset `NCAResult4BE` should be exported from R by `write.csv()`.
+
+## C~max~
+
+```{r, code = readLines('sas/sas-be-cmax.sas'), eval = FALSE}
+```
+
+```{r eval = FALSE}
+read_csv('sas/SAS_results_Cmax.csv') %>% 
+  knitr::kable(longtable = TRUE, booktabs = TRUE, # format = "latex", 
+                 caption = 'Cmax')
+```
+
+
+
+## AUC~last~
+
+```{r, code = readLines('sas/sas-be-auclast.sas'), eval = FALSE}
+```
+
+
+\pagebreak
 
 # Session Information
 
@@ -109,3 +195,38 @@ devtools::session_info()
 library(BE)
 knitr::write_bib(file = 'packages.bib')
 ```
+
+
+```{r, eval = FALSE, include = FALSE}
+
+BE::test2x2(NCAResult4BE, "Cmax")
+
+
+anova_be <- BE::test2x2(NCAResult4BE, "Cmax")[[1]] %>% 
+  as.data.frame() %>% 
+  mutate(Source = row.names(.)) %>% 
+  select(Source, SS, DF, F) %>% 
+  gather(parameter, value, -Source) %>% 
+  mutate_at(vars(value), funs(round), 5)
+  
+anova_sas <- read_lines('sas/SAS_results_Cmax.csv', skip = 181, n_max = 10) %>% 
+  paste(collapse = '\n') %>% 
+  read_csv() %>% 
+  rename(Name=2, Source=3, Type=4) %>% 
+  filter(Type %in% c('SS3', 'ERROR')) %>% 
+  select(Source, SS, DF, F) %>% 
+  mutate(Source = case_when(
+    Source == 'SEQ' ~ 'GROUP',
+    Source == 'SUBJ(SEQ)' ~ 'SUBJECT(GROUP)',
+    Source == 'PRD' ~ 'PERIOD',
+    Source == 'TRT' ~ 'DRUG',
+    TRUE ~ Source
+    )) %>% 
+  gather(parameter, value, -Source) %>% 
+  mutate_at(vars(value), ~ as.numeric(.x) %>% round(5)) %>% 
+  print()
+
+
+left_join(anova_be, anova_sas, by = c('Source', 'parameter'))
+```
+
