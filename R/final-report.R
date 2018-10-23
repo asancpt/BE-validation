@@ -9,4 +9,3 @@ BE::test2x2(NCAResult4BE, "Cmax")
 BE::test2x2(NCAResult4BE, "Tmax")
 
 # BE::be2x2(NCAResult4BE, c("AUClast", "Cmax", "Tmax"), rtfName="docs/report.rtf")
-

@@ -1,9 +1,9 @@
-DATA BE; /* It will load 91 records. */
+DATA BE; 
   INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
   INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
   IF CMAX =< 0 THEN DELETE;
   LNCMAX = LOG(Cmax);
-  LNAUCL = LOG(AUClast );
+  LNAUCL = LOG(AUClast);
 
 PROC PRINT; RUN;
 

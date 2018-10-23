@@ -16,48 +16,59 @@ output:
 ```{r include=FALSE}
 library(knitr)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(knitr.kable.NA = '')
 ```
 
 # Introduction
 
+To assess bioequivalence, the 90% confidence interval for the difference in the means of the log-transformed data should be calculated using appropriate methods to the study design. 
+The antilogs (exponents) of the confidence limits obtained constitute the 90% confidence interval for the ratio of the geometric means between the T and R products. [@fda;@chow;@hauschke] 
+To establish bioequivalence, the calculated confidence interval should fall within a bioequivalence limit, usually 80-125% for the ratio of the product averages. 
+For nonreplicated crossover designs, general linear model procedures available in PROC GLM in SAS are preferred, although linear mixed-effects model procedures can also be indicated for analysis. [@fda]
+
 `BE` R package [@R-BE] can analyze bioequivalence study data with industrial strength. 
-The current version `BE` performs bioequivalency tests for several variables of a 2x2 crossover study in a data file.
-To establish BE, the calculated confidence interval should fall within a BE limit, usually 80-125% for the ratio of the product averages. [@fda;@chow;@hauschke]
-In this document, the author performed validation of bioequivalence test performed by `BE` R package.
+The current version of `BE` performs bioequivalency tests for several pharmacokinetic parameters of the conventional two-treatment, two-period, two-sequence (2x2) randomized crossover design. 
+The statistical model includes factors accounting for the following sources of variation: sequence (SEQ), subjects nested in sequences (SUBJ(SEQ)), period (PRD), and treatment (TRT). 
+
+In this document, the author performed validation of bioequivalence tests performed by `BE` R package as compared to bioequivalence tests performed by PROC GLM or PROC MIXED in SAS.
 
 \pagebreak
 
 # Methods
 
-## Datasets
+## Dataset
 
-A simulated dataset, `NCAResult4BE` is shown in Appendix A.
+A simulated dataset of the conventional 2×2 crossover study for this analysis, `BE::NCAResult4BE` is shown in Appendix A. 
+The number of subjects in the sequence 'RT' is 17 and that in the sequence 'TR' is 16. (total N=33)
+The 4 variables, SUBJ (subject), GRP (group or sequence), PRD (period), and TRT (treatment), and the 3 pharmacokinetic parameters, AUC~last~, C~max~, and T~max~ are presented and there is no missing values. (total 66 observations with 7 variables)
 
-
-## Calculation `BE`
+## Bioequivalence tests in R
 
 The required R packages are following. 
 
 ```{r setup, message = FALSE}
 library(BE)         # install.packages("BE", repos="http://r.acr.kr")
-library(tidyverse)  # install.packages("tidyverse")
+library(dplyr)      # install.packages("dplyr")
+library(readr)      # install.packages("readr")
 ```
 
-`tab_r_be_results` function uses `BE::test2x2()` to calculate the 90% confidence interval.
+`tab_r_be_results` function uses `BE::test2x2()` and returns the 90% confidence interval.
 
 ```{r}
 tab_r_be_results <- function(parameter){
-  BE::test2x2(NCAResult4BE, parameter)[[4]] %>% 
+  BE::test2x2(BE::NCAResult4BE, parameter)[[4]] %>% 
   as.data.frame() %>% 
   mutate(Analysis = 'R: BE package') %>% 
   select(Analysis, `Lower Limit`, `Point Estimate`, `Upper Limit`)
 }
 ```
 
-## Calculation `SAS`
+## Bioequivalence tests in SAS
 
-`SAS PROC GLM` and `SAS PROC MIXED` in SAS version 9.0 with SEQ (sequence), TRT (treatment), SUBJ (subject), PRD (period) variables, and LNAUCL or LNCMAX denoting the response measure.  
-A part of examplary SAS program statement is following and the full SAS scripts are appended in Appendix B.
+To run BE analysis, PROC GLM and PROC MIXED in SAS version 9.4 were used.
+The SAS program statements include the variables, SEQ (sequence), TRT (treatment), SUBJ (subject), and PRD (period).
+LNAUCL (log-transformed AUC~last~) or LNCMAX (log-transformed C~max~) denotes the response measure. 
+A part of SAS scripts are shown below and the full SAS scripts are appended in Appendix B.
 
 ```r
 PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
@@ -76,7 +87,7 @@ ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1;
 ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
 ```
 
-A function, `tab_sas_proc_results()` reads SAS analysis results exported to Microsoft Excel files (`.xls`) and converted to comma separated version file (`.csv`). It returns a data frame of 90% confidence interval calculated either `PROC GLM` or `PROC MIXED` in SAS version 9.0.
+A function, `tab_sas_proc_results()` reads SAS analysis results exported to Microsoft Excel files (`.xls`) and converted to comma separated version file (`.csv`). It returns a data frame of 90% confidence interval calculated either `PROC GLM` or `PROC MIXED` in SAS.
 
 ```{r}
 tab_sas_proc_results <- function(filename, skip_no, analysis_name){
@@ -93,10 +104,9 @@ tab_sas_proc_results <- function(filename, skip_no, analysis_name){
 
 ## AUC~last~
 
-Comparison between BE and SAS is shown in Table \@ref(tab:tabauclast).
+Comparison of 90% confidence interval for the ratio of the geometric means of AUC~last~ between the T and R products is shown in Table \@ref(tab:tabauclast).
 
-
-```{r tabauclast}
+```{r}
 AUClast_R_BE <- tab_r_be_results("AUClast")
 
 AUClast_proc_glm <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
@@ -105,15 +115,20 @@ AUClast_proc_mixed <- tab_sas_proc_results('sas/SAS_results_AUClast.csv',
                                            skip = 278, 'SAS: PROC MIXED')
 
 # Combine all analyses of AUClast
-bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed) %>% 
-  kable(longtable = TRUE, booktabs = TRUE, caption = 'AUClast', digits = 5)
+AUClast_all_analyses <- bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed)
+```
+
+```{r tabauclast, echo = FALSE}
+kable(AUClast_all_analyses,
+      longtable = TRUE, booktabs = TRUE, digits = 5,
+      caption = 'Comparison of 90\\% confidence interval for the ratio of the geometric means of AUClast')
 ```
 
 ## C~max~
 
-Comparison between BE and SAS is shown in Table \@ref(tab:tabcmax).
+Comparison of 90% confidence interval for the ratio of the geometric means of AUC~last~ between the T and R products is shown in Table \@ref(tab:tabcmax).
 
-```{r tabcmax}
+```{r }
 Cmax_R_BE <- tab_r_be_results("Cmax")
 
 Cmax_proc_glm <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
@@ -122,25 +137,30 @@ Cmax_proc_mixed <- tab_sas_proc_results('sas/SAS_results_Cmax.csv',
                                         skip = 278, 'SAS: PROC MIXED')
 
 # Combine all analyses of Cmax
-bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed) %>% 
-  kable(longtable = TRUE, booktabs = TRUE, caption = 'Cmax', digits = 5)
+Cmax_all_analyses <- bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed)
+```
+
+```{r, tabcmax, echo = FALSE}
+kable(Cmax_all_analyses, longtable = TRUE, booktabs = TRUE, digits = 5, escape = TRUE,
+      caption = 'Comparison of 90\\% confidence interval for the ratio of the geometric means of Cmax')
 ```
 
 \pagebreak
 
 # Conclusion 
 
-*There is no discrepancy* between results from BE and SAS. 
+*There is no discrepancy* between bioequivalence tests performed by `BE` R package and those performed by PROC GLM or PROC MIXED in SAS.
 We also performed multiple analyses with the actual clinical trial datasets and have found no differences (data not shown: confidential).
-Noncompartmental analysis performed by the open-source R package, NonCompart can be **qualified and validated** enough to acquire the identical results of the commercial statistical software, SAS.
+
+Bioequivalence tests performed by the open-source `BE` R package for the conventional two-treatment, two-period, two-sequence (2x2) randomized crossover design can be **qualified and validated** enough to acquire the identical results of the commercial statistical software, SAS.
 
 *Please report issues regarding validation of the R package to <https://github.com/asancpt/BEreport/issues>.*
 
-------
+-----
 
 **Affiliation**:  
-Sungpil Han  
-M.D/Ph.D, Resident  
+Sungpil Han M.D/Ph.D  
+Resident,  
 Department of Clinical Pharmacology and Therapeutics,  
 Asan Medical Center, University of Ulsan,  
 Seoul 05505, Republic of Korea  
@@ -153,40 +173,53 @@ URL: www.github.com/shanmdphd
 
 # Raw data
 
-```{r, echo = FALSE}
-kable(NCAResult4BE, 
-      caption = 'The raw data used for analysis by BE and SAS PROC', 
+The concentration-time curves are ploted in Figure \@ref(fig:conctime) and the result of noncomparmental analysis is presented in Table \@ref(tab:rawdata).
+
+```{r conctime, echo = FALSE, fig.cap = 'Concentration-time curves'}
+knitr::include_graphics('assets/conc-time.pdf')
+```
+
+```{r rawdata, echo = FALSE}
+kable(BE::NCAResult4BE, 
+      caption = 'The raw data used for analysis in R and SAS', 
       longtable = TRUE, booktabs = TRUE)
 ```
 
-\pagebreak
-
 # SAS Scripts and results
 
-To run these scripts, the dataset `NCAResult4BE` should be exported from R by `write.csv()`.
-
-## C~max~
-
-```{r, code = readLines('sas/sas-be-cmax.sas'), eval = FALSE}
-```
-
-```{r eval = FALSE}
-read_csv('sas/SAS_results_Cmax.csv') %>% 
-  knitr::kable(longtable = TRUE, booktabs = TRUE, caption = 'Cmax')
-```
+To run these scripts, the dataset `BE::NCAResult4BE` should be exported from R by `write.csv()`.
 
 ## AUC~last~
 
 ```{r, code = readLines('sas/sas-be-auclast.sas'), eval = FALSE}
 ```
 
-\pagebreak
+```{r echo = FALSE}
+read_csv('sas/SAS_results_AUClast.csv', skip=143, n_max = 4) %>% 
+  select(1:6) %>% 
+  knitr::kable(longtable = TRUE, booktabs = TRUE, 
+               caption = 'Table of analysis of variance for log-transformed AUClast (PROC GLM)') 
+```
+
+## C~max~
+
+```{r, code = readLines('sas/sas-be-cmax.sas'), eval = FALSE}
+```
+
+```{r echo = FALSE}
+read_csv('sas/SAS_results_Cmax.csv', skip=143, n_max = 4) %>% 
+  select(1:6) %>% 
+  knitr::kable(longtable = TRUE, booktabs = TRUE, 
+               caption = 'Table of analysis of variance for log-transformed Cmax (PROC GLM)') 
+```
 
 # Session Information
 
 ```{r}
 devtools::session_info()
 ```
+
+\pagebreak
 
 # References {-}
 
@@ -196,8 +229,7 @@ knitr::write_bib(file = 'packages.bib')
 ```
 
 ```{r, eval = FALSE, include = FALSE}
-
-BE::test2x2(NCAResult4BE, "Cmax")
+BE::test2x2(BE::NCAResult4BE, "Cmax")
 
 anova_be <- BE::test2x2(NCAResult4BE, "Cmax")[[1]] %>% 
   as.data.frame() %>% 

@@ -1,302 +1,199 @@
 Validation of Bioequivalence Test Performed by BE R package
 ================
 Sungpil Han <shan@acp.kr>
-2018-10-10
+2018-10-23
 
 
 
 # Introduction
 
-BE R package (Bae 2018) can conduct a noncompartmental analysis as
-similar as possible to the most widely used commercial software for
-pharmacokinetic analysis, i.e. [Phoenix<sup>®</sup>
-WinNonlin<sup>®</sup>](https://www.certara.com/software/pkpd-modeling-and-simulation/phoenix-winnonlin/).
-This document provides validation of noncompartmental analysis performed
-by BE R package version 0.1.1 as compared to the results from the
-commercial software, SAS<sup>®</sup> version 9.4.
+To assess bioequivalence, the 90% confidence interval for the difference
+in the means of the log-transformed data should be calculated using
+appropriate methods to the study design. The antilogs (exponents) of the
+confidence limits obtained constitute the 90% confidence interval for
+the ratio of the geometric means between the T and R products. (Center
+for Drug Evaluation and Research (CDER), Food and Drug Administration,
+U.S. Department of Health and Human Services 2001; Chow and Liu 2008;
+Hauschke, Steinijans, and Pigeot 2007) To establish bioequivalence, the
+calculated confidence interval should fall within a bioequivalence
+limit, usually 80-125% for the ratio of the product averages. For
+nonreplicated crossover designs, general linear model procedures
+available in PROC GLM in SAS are preferred, although linear
+mixed-effects model procedures can also be indicated for analysis.
+(Center for Drug Evaluation and Research (CDER), Food and Drug
+Administration, U.S. Department of Health and Human Services 2001)
+
+`BE` R package (Bae 2018) can analyze bioequivalence study data with
+industrial strength. The current version of `BE` performs bioequivalency
+tests for several pharmacokinetic parameters of the conventional
+two-treatment, two-period, two-sequence (2x2) randomized crossover
+design. The statistical model includes factors accounting for the
+following sources of variation: sequence (SEQ), subjects nested in
+sequences (SUBJ(SEQ)), period (PRD), and treatment (TRT).
+
+In this document, the author performed validation of bioequivalence
+tests performed by `BE` R package as compared to bioequivalence tests
+performed by PROC GLM or PROC MIXED in SAS.
+
+# Methods
+
+## Dataset
+
+A simulated dataset of the conventional 2×2 crossover study for this
+analysis, `BE::NCAResult4BE` is shown in Appendix A. The number of
+subjects in the sequence ‘RT’ is 17 and that in the sequence ‘TR’ is 16.
+(total N=33) The 4 variables, SUBJ (subject), GRP (group or sequence),
+PRD (period), and TRT (treatment), and the 3 pharmacokinetic parameters,
+AUC<sub>last</sub>, C<sub>max</sub>, and T<sub>max</sub> are presented
+and there is no missing values. (total 66 observations with 7 variables)
+
+## Bioequivalence tests in R
+
+The required R packages are following.
+
+``` r
+library(BE)         # install.packages("BE", repos="http://r.acr.kr")
+library(dplyr)      # install.packages("dplyr")
+library(readr)      # install.packages("readr")
+```
+
+`tab_r_be_results` function uses `BE::test2x2()` and returns the 90%
+confidence interval.
+
+``` r
+tab_r_be_results <- function(parameter){
+  BE::test2x2(BE::NCAResult4BE, parameter)[[4]] %>% 
+  as.data.frame() %>% 
+  mutate(Analysis = 'R: BE package') %>% 
+  select(Analysis, `Lower Limit`, `Point Estimate`, `Upper Limit`)
+}
+```
+
+## Bioequivalence tests in SAS
+
+To run BE analysis, PROC GLM and PROC MIXED in SAS version 9.4 were
+used. The SAS program statements include the variables, SEQ (sequence),
+TRT (treatment), SUBJ (subject), and PRD (period). LNAUCL
+(log-transformed AUC<sub>last</sub>) or LNCMAX (log-transformed
+C<sub>max</sub>) denotes the response measure. A part of SAS scripts are
+shown below and the full SAS scripts are appended in Appendix B.
+
+``` r
+PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
+CLASS SEQ PRD TRT SUBJ;
+MODEL LNAUCL = SEQ SUBJ(SEQ) PRD TRT;
+RANDOM SUBJ(SEQ)/TEST;
+LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
+```
+
+``` r
+PROC MIXED DATA=BE; /* MIXED uses all data. */
+CLASS SEQ TRT SUBJ PRD;
+MODEL LNAUCL = SEQ PRD TRT;
+RANDOM SUBJ(SEQ);
+ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1;
+ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
+```
+
+A function, `tab_sas_proc_results()` reads SAS analysis results exported
+to Microsoft Excel files (`.xls`) and converted to comma separated
+version file (`.csv`). It returns a data frame of 90% confidence
+interval calculated either `PROC GLM` or `PROC MIXED` in SAS.
+
+``` r
+tab_sas_proc_results <- function(filename, skip_no, analysis_name){
+  read_lines(filename, skip = skip_no, n_max = 2) %>% 
+  paste(collapse='\n') %>% read_csv() %>% 
+  mutate(Analysis = analysis_name) %>% 
+  select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
+}
+```
 
 # Results
 
-A function, `Equal()` will return `TRUE` if there is no difference
-between results from NonCompart and
-    WinNonlin.
+## AUC<sub>last</sub>
+
+Comparison of 90% confidence interval for the ratio of the geometric
+means of AUC<sub>last</sub> between the T and R products is shown in
+Table @ref(tab:tabauclast).
 
 ``` r
-library(BE) # install.packages("BE", repos="http://r.acr.kr")
+AUClast_R_BE <- tab_r_be_results("AUClast")
+
+AUClast_proc_glm <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
+                                         skip = 206, 'SAS: PROC GLM')
+AUClast_proc_mixed <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
+                                           skip = 278, 'SAS: PROC MIXED')
+
+# Combine all analyses of AUClast
+AUClast_all_analyses <- bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed)
 ```
 
-    ## Loading required package: rtf
+| Analysis        | Lower Limit | Point Estimate | Upper Limit |
+| :-------------- | ----------: | -------------: | ----------: |
+| R: BE package   |     0.88944 |        0.95408 |     1.02341 |
+| SAS: PROC GLM   |     0.88944 |        0.95408 |     1.02341 |
+| SAS: PROC MIXED |     0.88944 |        0.95408 |     1.02341 |
+
+Comparison of 90% confidence interval for the ratio of the geometric
+means of AUClast
+
+## C<sub>max</sub>
+
+Comparison of 90% confidence interval for the ratio of the geometric
+means of AUC<sub>last</sub> between the T and R products is shown in
+Table @ref(tab:tabcmax).
 
 ``` r
-library(tidyverse)
+Cmax_R_BE <- tab_r_be_results("Cmax")
+
+Cmax_proc_glm <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
+                                      skip = 206, 'SAS: PROC GLM')
+Cmax_proc_mixed <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
+                                        skip = 278, 'SAS: PROC MIXED')
+
+# Combine all analyses of Cmax
+Cmax_all_analyses <- bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed)
 ```
 
-    ## -- Attaching packages ---------------------------------- tidyverse 1.2.1 --
+| Analysis        | Lower Limit | Point Estimate | Upper Limit |
+| :-------------- | ----------: | -------------: | ----------: |
+| R: BE package   |     0.90136 |        0.97984 |     1.06515 |
+| SAS: PROC GLM   |     0.90136 |        0.97984 |     1.06515 |
+| SAS: PROC MIXED |     0.90136 |        0.97984 |     1.06515 |
 
-    ## √ ggplot2 3.0.0     √ purrr   0.2.5
-    ## √ tibble  1.4.2     √ dplyr   0.7.6
-    ## √ tidyr   0.8.1     √ stringr 1.3.1
-    ## √ readr   1.1.1     √ forcats 0.3.0
+Comparison of 90% confidence interval for the ratio of the geometric
+means of Cmax
 
-    ## -- Conflicts ------------------------------------- tidyverse_conflicts() --
-    ## x dplyr::filter() masks stats::filter()
-    ## x dplyr::lag()    masks stats::lag()
+# Conclusion
 
-``` r
-library(knitr)
-knitr::opts_chunk$set(message = FALSE)
-```
+*There is no discrepancy* between bioequivalence tests performed by `BE`
+R package and those performed by PROC GLM or PROC MIXED in SAS. We also
+performed multiple analyses with the actual clinical trial datasets and
+have found no differences (data not shown: confidential).
 
-## AUClast
+Bioequivalence tests performed by the open-source `BE` R package for the
+conventional two-treatment, two-period, two-sequence (2x2) randomized
+crossover design can be **qualified and validated** enough to acquire
+the identical results of the commercial statistical software, SAS.
 
-``` r
-BE::test2x2(NCAResult4BE, "AUClast")
-```
+*Please report issues regarding validation of the R package to
+<https://github.com/asancpt/BEreport/issues>.*
 
-    ## $`Analysis of Variance (log scale)`
-    ##                          SS DF           MS           F            p
-    ## SUBJECT        2.875497e+00 32 8.985928e-02 3.183942248 0.0008742828
-    ## GROUP          1.024607e-01  1 1.024607e-01 1.145416548 0.2927731856
-    ## SUBJECT(GROUP) 2.773036e+00 31 8.945279e-02 3.169539016 0.0009544080
-    ## PERIOD         3.027399e-05  1 3.027399e-05 0.001072684 0.9740824428
-    ## DRUG           3.643467e-02  1 3.643467e-02 1.290972690 0.2645764201
-    ## ERROR          8.749021e-01 31 2.822265e-02          NA           NA
-    ## TOTAL          3.786834e+00 65           NA          NA           NA
-    ## 
-    ## $`Between and Within Subject Variability`
-    ##                                 Between Subject Within Subject
-    ## Variance Estimate                    0.03061507     0.02822265
-    ## Coefficient of Variation, CV(%)     17.63193968    16.91883011
-    ## 
-    ## $`Least Square Means (geometric mean)`
-    ##                 Reference Drug Test Drug
-    ## Geometric Means       5092.098  4858.245
-    ## 
-    ## $`90% Confidence Interval of Geometric Mean Ratio (T/R)`
-    ##                  Lower Limit Point Estimate Upper Limit
-    ## 90% CI for Ratio    0.889436      0.9540753    1.023412
-    ## 
-    ## $`Sample Size`
-    ##                       True Ratio=1 True Ratio=Point Estimate
-    ## 80% Power Sample Size            6                         7
+-----
 
-## Cmax
-
-``` r
-BE::test2x2(NCAResult4BE, "Cmax")
-```
-
-    ## $`Analysis of Variance (log scale)`
-    ##                          SS DF           MS           F          p
-    ## SUBJECT        2.861492e+00 32 8.942162e-02 2.237604579 0.01367095
-    ## GROUP          9.735789e-05  1 9.735789e-05 0.001054764 0.97429977
-    ## SUBJECT(GROUP) 2.861394e+00 31 9.230304e-02 2.309706785 0.01131826
-    ## PERIOD         4.717497e-03  1 4.717497e-03 0.118046317 0.73348258
-    ## DRUG           6.837756e-03  1 6.837756e-03 0.171101730 0.68198228
-    ## ERROR          1.238856e+00 31 3.996310e-02          NA         NA
-    ## TOTAL          4.112258e+00 65           NA          NA         NA
-    ## 
-    ## $`Between and Within Subject Variability`
-    ##                                 Between Subject Within Subject
-    ## Variance Estimate                    0.02616997      0.0399631
-    ## Coefficient of Variation, CV(%)     16.28355371     20.1921690
-    ## 
-    ## $`Least Square Means (geometric mean)`
-    ##                 Reference Drug Test Drug
-    ## Geometric Means       825.5206  808.8778
-    ## 
-    ## $`90% Confidence Interval of Geometric Mean Ratio (T/R)`
-    ##                  Lower Limit Point Estimate Upper Limit
-    ## 90% CI for Ratio   0.9013625      0.9798396    1.065149
-    ## 
-    ## $`Sample Size`
-    ##                       True Ratio=1 True Ratio=Point Estimate
-    ## 80% Power Sample Size            8                         8
-
-``` r
-results_Cmax <- BE::test2x2(NCAResult4BE, "Cmax")
-ls(results_Cmax)
-```
-
-    ## [1] "90% Confidence Interval of Geometric Mean Ratio (T/R)"
-    ## [2] "Analysis of Variance (log scale)"                     
-    ## [3] "Between and Within Subject Variability"               
-    ## [4] "Least Square Means (geometric mean)"                  
-    ## [5] "Sample Size"
-
-``` r
-results_Cmax$`90% Confidence Interval of Geometric Mean Ratio (T/R)` %>% 
-  as.tibble(rownames = row.names(.))
-```
-
-    ## # A tibble: 1 x 4
-    ##   `90% CI for Ratio` `Lower Limit` `Point Estimate` `Upper Limit`
-    ##   <chr>                      <dbl>            <dbl>         <dbl>
-    ## 1 90% CI for Ratio           0.901            0.980          1.07
-
-### PROC GLM
-
-``` r
-gather_sas <- function(df){
-  df %>% 
-    gather('parameter', 'value')
-}
-read_csv('sas/proc-glm.csv') %>% 
-  gather_sas()
-```
-
-    ## # A tibble: 11 x 2
-    ##    parameter    value
-    ##    <chr>        <dbl>
-    ##  1 Obs         1     
-    ##  2 LNPE       -0.0204
-    ##  3 DF         31     
-    ##  4 SE          0.0492
-    ##  5 LNLM        0.0835
-    ##  6 LNLL       -0.104 
-    ##  7 LNUL        0.0631
-    ##  8 PE          0.980 
-    ##  9 LL          0.901 
-    ## 10 UL          1.07  
-    ## 11 WD          0.164
-
-### PROC MIXED
-
-``` r
-read_csv('sas/proc-mixed.csv') %>% 
-  gather_sas()
-```
-
-    ## # A tibble: 16 x 2
-    ##    parameter value   
-    ##    <chr>     <chr>   
-    ##  1 Obs       1       
-    ##  2 Label     T VS R  
-    ##  3 Estimate  -0.02037
-    ##  4 StdErr    0.04924 
-    ##  5 DF        31      
-    ##  6 tValue    -0.41   
-    ##  7 Probt     0.682   
-    ##  8 Alpha     0.1     
-    ##  9 Lower     -0.1038 
-    ## 10 Upper     0.06311 
-    ## 11 MSE       0.039963
-    ## 12 LNLM      0.083481
-    ## 13 PE        0.97984 
-    ## 14 LL        0.90136 
-    ## 15 UL        1.06515 
-    ## 16 WD        0.16379
-
-## Tmax
-
-``` r
-BE::test2x2(NCAResult4BE, "Tmax")
-```
-
-    ## $`Analysis of Variance (log scale)`
-    ##                         SS DF         MS         F          p
-    ## SUBJECT         7.52334340 32 0.23510448 1.6924313 0.07317245
-    ## GROUP           0.01395806  1 0.01395806 0.0576212 0.81187628
-    ## SUBJECT(GROUP)  7.50938534 31 0.24223824 1.7437846 0.06351437
-    ## PERIOD          0.48117922  1 0.48117922 3.4638334 0.07223183
-    ## DRUG            0.10288377  1 0.10288377 0.7406227 0.39606886
-    ## ERROR           4.30637210 31 0.13891523        NA         NA
-    ## TOTAL          12.42781245 65         NA        NA         NA
-    ## 
-    ## $`Between and Within Subject Variability`
-    ##                                 Between Subject Within Subject
-    ## Variance Estimate                     0.0516615      0.1389152
-    ## Coefficient of Variation, CV(%)      23.0259070     38.6039754
-    ## 
-    ## $`Least Square Means (geometric mean)`
-    ##                 Reference Drug Test Drug
-    ## Geometric Means        1.15244    1.0649
-    ## 
-    ## $`90% Confidence Interval of Geometric Mean Ratio (T/R)`
-    ##                  Lower Limit Point Estimate Upper Limit
-    ## 90% CI for Ratio    0.790851      0.9240393    1.079658
-    ## 
-    ## $`Sample Size`
-    ##                       True Ratio=1 True Ratio=Point Estimate
-    ## 80% Power Sample Size           25                        43
-
-# SAS
-
-``` bash
-cat sas/sas-be-model-2.sas
-```
-
-    ## DATA BE; /* It will load 91 records. */
-    ##   INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
-    ##   INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
-    ##   IF CMAX =< 0 THEN DELETE;
-    ##   LNCMAX = LOG(Cmax);
-    ##   LNAUCL = LOG(AUClast );
-    ## 
-    ## PROC PRINT; RUN;
-    ## 
-    ## PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
-    ##   CLASS SEQ PRD TRT SUBJ;
-    ##   MODEL LNCMAX = SEQ SUBJ(SEQ) PRD TRT;
-    ##   RANDOM SUBJ(SEQ)/TEST;
-    ##   LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
-    ## RUN;
-    ## 
-    ## PROC PRINT DATA=STATRES; RUN;
-    ## PROC PRINT DATA=LSOUT; RUN;
-    ## 
-    ## DATA STATRES;
-    ##   SET STATRES;
-    ##   IF _TYPE_='ERROR' THEN CALL SYMPUT('DF', DF);
-    ## 
-    ## DATA LSOUT;
-    ##   SET LSOUT;
-    ##   IF TRT='R' THEN CALL SYMPUT('GMR_R', LSMEAN);
-    ##   IF TRT='T' THEN CALL SYMPUT('GMR_T', LSMEAN);
-    ##   IF TRT='R' THEN CALL SYMPUT('V_R', COV1);
-    ##   IF TRT='T' THEN CALL SYMPUT('V_T', COV2);
-    ##   IF TRT='T' THEN CALL SYMPUT('COV', COV1);
-    ## 
-    ## DATA LSOUT2;
-    ##   LNPE = &GMR_T - &GMR_R;
-    ##   DF = &DF;
-    ##   SE = SQRT(&V_R + &V_T - 2*&COV);
-    ##   LNLM = TINV(0.95, DF)*SE;
-    ##   LNLL = LNPE - LNLM ;
-    ##   LNUL = LNPE + LNLM;
-    ##   PE = EXP(LNPE);
-    ##   LL = EXP(LNLL);
-    ##   UL = EXP(LNUL);
-    ##   WD = UL - LL;
-    ## 
-    ## PROC PRINT DATA=LSOUT2; RUN;
-    ## 
-    ## PROC MIXED DATA=BE; /* MIXED  uses all data. */
-    ##   CLASS SEQ TRT SUBJ PRD;
-    ##   MODEL LNCMAX = SEQ PRD TRT;
-    ##   RANDOM SUBJ(SEQ);
-    ##   ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1; 
-    ##   ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
-    ## RUN;
-    ## 
-    ## DATA COVPAR;
-    ##   SET COVPAR;
-    ##   IF CovParm = 'Residual' THEN CALL SYMPUT('MSE', Estimate);
-    ## 
-    ## DATA ESTIM;
-    ##   SET ESTIM;
-    ##   MSE = &MSE;
-    ##   LNLM = (Upper - Lower)/2;
-    ##   PE = EXP(Estimate);
-    ##   LL = EXP(Lower);
-    ##   UL = EXP(Upper);
-    ##   WD = UL - LL;
-    ## 
-    ## PROC PRINT Data=ESTIM; RUN;
+**Affiliation**:  
+Sungpil Han M.D/Ph.D  
+Resident,  
+Department of Clinical Pharmacology and Therapeutics,  
+Asan Medical Center, University of Ulsan,  
+Seoul 05505, Republic of Korea  
+E-mail: <shan@acp.kr>  
+URL: www.github.com/shanmdphd
 
 # (APPENDIX) Appendix
 
-# Raw
+# Raw data
 
 | SUBJ | GRP | PRD | TRT |  AUClast |    Cmax | Tmax |
 | ---: | :-- | --: | :-- | -------: | ------: | ---: |
@@ -367,8 +264,175 @@ cat sas/sas-be-model-2.sas
 |   36 | RT  |   1 | R   | 4669.384 |  682.87 | 3.01 |
 |   36 | RT  |   2 | T   | 3783.584 |  729.63 | 1.00 |
 
-Description of settings for the noncompartmental analysis performed in
-WinNonlin and links to the raw data
+The raw data used for analysis in R and SAS
+
+# SAS Scripts and results
+
+To run these scripts, the dataset `BE::NCAResult4BE` should be exported
+from R by `write.csv()`.
+
+## AUC<sub>last</sub>
+
+``` r
+DATA BE; 
+  INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
+  INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
+  IF CMAX =< 0 THEN DELETE;
+  LNCMAX = LOG(Cmax);
+  LNAUCL = LOG(AUClast);
+
+PROC PRINT; RUN;
+
+PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
+  CLASS SEQ PRD TRT SUBJ;
+  MODEL LNAUCL = SEQ SUBJ(SEQ) PRD TRT;
+  RANDOM SUBJ(SEQ)/TEST;
+  LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
+RUN;
+
+PROC PRINT DATA=STATRES; RUN;
+PROC PRINT DATA=LSOUT; RUN;
+
+DATA STATRES;
+  SET STATRES;
+  IF _TYPE_='ERROR' THEN CALL SYMPUT('DF', DF);
+
+DATA LSOUT;
+  SET LSOUT;
+  IF TRT='R' THEN CALL SYMPUT('GMR_R', LSMEAN);
+  IF TRT='T' THEN CALL SYMPUT('GMR_T', LSMEAN);
+  IF TRT='R' THEN CALL SYMPUT('V_R', COV1);
+  IF TRT='T' THEN CALL SYMPUT('V_T', COV2);
+  IF TRT='T' THEN CALL SYMPUT('COV', COV1);
+
+DATA LSOUT2;
+  LNPE = &GMR_T - &GMR_R;
+  DF = &DF;
+  SE = SQRT(&V_R + &V_T - 2*&COV);
+  LNLM = TINV(0.95, DF)*SE;
+  LNLL = LNPE - LNLM ;
+  LNUL = LNPE + LNLM;
+  PE = EXP(LNPE);
+  LL = EXP(LNLL);
+  UL = EXP(LNUL);
+  WD = UL - LL;
+
+PROC PRINT DATA=LSOUT2; RUN;
+
+PROC MIXED DATA=BE; /* MIXED  uses all data. */
+  CLASS SEQ TRT SUBJ PRD;
+  MODEL LNAUCL = SEQ PRD TRT;
+  RANDOM SUBJ(SEQ);
+  ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1; 
+  ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
+RUN;
+
+DATA COVPAR;
+  SET COVPAR;
+  IF CovParm = 'Residual' THEN CALL SYMPUT('MSE', Estimate);
+
+DATA ESTIM;
+  SET ESTIM;
+  MSE = &MSE;
+  LNLM = (Upper - Lower)/2;
+  PE = EXP(Estimate);
+  LL = EXP(Lower);
+  UL = EXP(Upper);
+  WD = UL - LL;
+
+PROC PRINT Data=ESTIM; RUN;
+```
+
+| Source           | DF | Type III SS | Mean Square | F Value | Pr \> F |
+| :--------------- | -: | ----------: | ----------: | ------: | ------: |
+| SUBJ(SEQ)        | 31 |   2.7730360 |   0.0894530 |    3.17 |  0.0010 |
+| PRD              |  1 |   0.0000303 |   0.0000303 |    0.00 |  0.9741 |
+| TRT              |  1 |   0.0364350 |   0.0364350 |    1.29 |  0.2646 |
+| Error: MS(Error) | 31 |   0.8749020 |   0.0282230 |         |         |
+
+Table of analysis of variance for log-transformed AUClast (PROC GLM)
+
+## C<sub>max</sub>
+
+``` r
+DATA BE; 
+  INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
+  INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
+  IF CMAX =< 0 THEN DELETE;
+  LNCMAX = LOG(Cmax);
+  LNAUCL = LOG(AUClast);
+
+PROC PRINT; RUN;
+
+PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
+  CLASS SEQ PRD TRT SUBJ;
+  MODEL LNCMAX = SEQ SUBJ(SEQ) PRD TRT;
+  RANDOM SUBJ(SEQ)/TEST;
+  LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
+RUN;
+
+PROC PRINT DATA=STATRES; RUN;
+PROC PRINT DATA=LSOUT; RUN;
+
+DATA STATRES;
+  SET STATRES;
+  IF _TYPE_='ERROR' THEN CALL SYMPUT('DF', DF);
+
+DATA LSOUT;
+  SET LSOUT;
+  IF TRT='R' THEN CALL SYMPUT('GMR_R', LSMEAN);
+  IF TRT='T' THEN CALL SYMPUT('GMR_T', LSMEAN);
+  IF TRT='R' THEN CALL SYMPUT('V_R', COV1);
+  IF TRT='T' THEN CALL SYMPUT('V_T', COV2);
+  IF TRT='T' THEN CALL SYMPUT('COV', COV1);
+
+DATA LSOUT2;
+  LNPE = &GMR_T - &GMR_R;
+  DF = &DF;
+  SE = SQRT(&V_R + &V_T - 2*&COV);
+  LNLM = TINV(0.95, DF)*SE;
+  LNLL = LNPE - LNLM ;
+  LNUL = LNPE + LNLM;
+  PE = EXP(LNPE);
+  LL = EXP(LNLL);
+  UL = EXP(LNUL);
+  WD = UL - LL;
+
+PROC PRINT DATA=LSOUT2; RUN;
+
+PROC MIXED DATA=BE; /* MIXED  uses all data. */
+  CLASS SEQ TRT SUBJ PRD;
+  MODEL LNCMAX = SEQ PRD TRT;
+  RANDOM SUBJ(SEQ);
+  ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1; 
+  ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
+RUN;
+
+DATA COVPAR;
+  SET COVPAR;
+  IF CovParm = 'Residual' THEN CALL SYMPUT('MSE', Estimate);
+
+DATA ESTIM;
+  SET ESTIM;
+  MSE = &MSE;
+  LNLM = (Upper - Lower)/2;
+  PE = EXP(Estimate);
+  LL = EXP(Lower);
+  UL = EXP(Upper);
+  WD = UL - LL;
+
+PROC PRINT Data=ESTIM; RUN;
+```
+
+| Source           | DF | Type III SS | Mean Square | F Value | Pr \> F |
+| :--------------- | -: | ----------: | ----------: | ------: | ------: |
+| SUBJ(SEQ)        | 31 |    2.861394 |    0.092303 |    2.31 |  0.0113 |
+| PRD              |  1 |    0.004717 |    0.004717 |    0.12 |  0.7335 |
+| TRT              |  1 |    0.006838 |    0.006838 |    0.17 |  0.6820 |
+| Error: MS(Error) | 31 |    1.238856 |    0.039963 |         |         |
+
+Table of analysis of variance for log-transformed Cmax (PROC
+    GLM)
 
 # Session Information
 
@@ -376,87 +440,73 @@ WinNonlin and links to the raw data
 devtools::session_info()
 ```
 
+    ## - Session info ----------------------------------------------------------
     ##  setting  value                       
     ##  version  R version 3.5.1 (2018-07-02)
+    ##  os       Windows 7 x64 SP 1          
     ##  system   x86_64, mingw32             
     ##  ui       RTerm                       
     ##  language (EN)                        
     ##  collate  Korean_Korea.949            
+    ##  ctype    Korean_Korea.949            
     ##  tz       Asia/Seoul                  
-    ##  date     2018-10-10                  
+    ##  date     2018-10-23                  
     ## 
-    ##  package     * version date       source                             
-    ##  assertthat    0.2.0   2017-04-11 CRAN (R 3.5.0)                     
-    ##  backports     1.1.2   2017-12-13 CRAN (R 3.5.0)                     
-    ##  base        * 3.5.1   2018-07-02 local                              
-    ##  BE          * 0.1.1   2018-07-19 CRAN (R 3.5.1)                     
-    ##  bindr         0.1.1   2018-03-13 CRAN (R 3.5.0)                     
-    ##  bindrcpp      0.2.2   2018-03-29 CRAN (R 3.5.0)                     
-    ##  broom         0.5.0   2018-07-17 CRAN (R 3.5.1)                     
-    ##  cellranger    1.1.0   2016-07-27 CRAN (R 3.5.0)                     
-    ##  cli           1.0.1   2018-09-25 CRAN (R 3.5.1)                     
-    ##  colorspace    1.3-2   2016-12-14 CRAN (R 3.5.0)                     
-    ##  compiler      3.5.1   2018-07-02 local                              
-    ##  crayon        1.3.4   2018-06-08 Github (gaborcsardi/crayon@3e751fb)
-    ##  datasets    * 3.5.1   2018-07-02 local                              
-    ##  devtools      1.13.6  2018-06-27 CRAN (R 3.5.0)                     
-    ##  digest        0.6.17  2018-09-12 CRAN (R 3.5.1)                     
-    ##  dplyr       * 0.7.6   2018-06-29 CRAN (R 3.5.0)                     
-    ##  evaluate      0.12    2018-10-09 CRAN (R 3.5.1)                     
-    ##  fansi         0.4.0   2018-10-05 CRAN (R 3.5.1)                     
-    ##  forcats     * 0.3.0   2018-02-19 CRAN (R 3.5.0)                     
-    ##  ggplot2     * 3.0.0   2018-07-03 CRAN (R 3.5.1)                     
-    ##  glue          1.3.0   2018-07-17 CRAN (R 3.5.1)                     
-    ##  graphics    * 3.5.1   2018-07-02 local                              
-    ##  grDevices   * 3.5.1   2018-07-02 local                              
-    ##  grid          3.5.1   2018-07-02 local                              
-    ##  gtable        0.2.0   2016-02-26 CRAN (R 3.5.0)                     
-    ##  haven         1.1.2   2018-06-27 CRAN (R 3.5.0)                     
-    ##  highr         0.7     2018-06-09 CRAN (R 3.5.0)                     
-    ##  hms           0.4.2   2018-03-10 CRAN (R 3.5.0)                     
-    ##  htmltools     0.3.6   2017-04-28 CRAN (R 3.5.0)                     
-    ##  httr          1.3.1   2017-08-20 CRAN (R 3.5.0)                     
-    ##  jsonlite      1.5     2017-06-01 CRAN (R 3.5.0)                     
-    ##  knitr       * 1.20    2018-02-20 CRAN (R 3.5.0)                     
-    ##  lattice       0.20-35 2017-03-25 CRAN (R 3.5.0)                     
-    ##  lazyeval      0.2.1   2017-10-29 CRAN (R 3.5.0)                     
-    ##  lubridate     1.7.4   2018-04-11 CRAN (R 3.5.0)                     
-    ##  magrittr      1.5     2014-11-22 CRAN (R 3.5.0)                     
-    ##  memoise       1.1.0   2017-04-21 CRAN (R 3.5.0)                     
-    ##  methods     * 3.5.1   2018-07-02 local                              
-    ##  modelr        0.1.2   2018-05-11 CRAN (R 3.5.0)                     
-    ##  munsell       0.5.0   2018-06-12 CRAN (R 3.5.0)                     
-    ##  nlme          3.1-137 2018-04-07 CRAN (R 3.5.1)                     
-    ##  pillar        1.3.0   2018-07-14 CRAN (R 3.5.1)                     
-    ##  pkgconfig     2.0.2   2018-08-16 CRAN (R 3.5.1)                     
-    ##  plyr          1.8.4   2016-06-08 CRAN (R 3.5.0)                     
-    ##  purrr       * 0.2.5   2018-05-29 CRAN (R 3.5.0)                     
-    ##  R.methodsS3   1.7.1   2016-02-16 CRAN (R 3.5.0)                     
-    ##  R.oo          1.22.0  2018-04-22 CRAN (R 3.5.0)                     
-    ##  R6            2.3.0   2018-10-04 CRAN (R 3.5.1)                     
-    ##  Rcpp          0.12.19 2018-10-01 CRAN (R 3.5.1)                     
-    ##  readr       * 1.1.1   2017-05-16 CRAN (R 3.5.0)                     
-    ##  readxl        1.1.0   2018-04-20 CRAN (R 3.5.0)                     
-    ##  rlang         0.2.2   2018-08-16 CRAN (R 3.5.1)                     
-    ##  rmarkdown     1.10    2018-06-11 CRAN (R 3.5.0)                     
-    ##  rprojroot     1.3-2   2018-01-03 CRAN (R 3.5.0)                     
-    ##  rstudioapi    0.8     2018-10-02 CRAN (R 3.5.1)                     
-    ##  rtf         * 0.4-13  2018-05-17 CRAN (R 3.5.1)                     
-    ##  rvest         0.3.2   2016-06-17 CRAN (R 3.5.0)                     
-    ##  scales        1.0.0   2018-08-09 CRAN (R 3.5.1)                     
-    ##  stats       * 3.5.1   2018-07-02 local                              
-    ##  stringi       1.2.4   2018-07-20 CRAN (R 3.5.1)                     
-    ##  stringr     * 1.3.1   2018-05-10 CRAN (R 3.5.0)                     
-    ##  tibble      * 1.4.2   2018-01-22 CRAN (R 3.5.0)                     
-    ##  tidyr       * 0.8.1   2018-05-18 CRAN (R 3.5.0)                     
-    ##  tidyselect    0.2.4   2018-02-26 CRAN (R 3.5.0)                     
-    ##  tidyverse   * 1.2.1   2017-11-14 CRAN (R 3.5.0)                     
-    ##  tools         3.5.1   2018-07-02 local                              
-    ##  utf8          1.1.4   2018-05-24 CRAN (R 3.5.0)                     
-    ##  utils       * 3.5.1   2018-07-02 local                              
-    ##  withr         2.1.2   2018-03-15 CRAN (R 3.5.0)                     
-    ##  xml2          1.2.0   2018-01-24 CRAN (R 3.5.0)                     
-    ##  yaml          2.2.0   2018-07-25 CRAN (R 3.5.1)
+    ## - Packages --------------------------------------------------------------
+    ##  package     * version date       lib source                             
+    ##  assertthat    0.2.0   2017-04-11 [1] CRAN (R 3.5.0)                     
+    ##  backports     1.1.2   2017-12-13 [1] CRAN (R 3.5.0)                     
+    ##  base64enc     0.1-3   2015-07-28 [1] CRAN (R 3.5.0)                     
+    ##  BE          * 0.1.1   2018-07-19 [1] CRAN (R 3.5.1)                     
+    ##  bindr         0.1.1   2018-03-13 [1] CRAN (R 3.5.0)                     
+    ##  bindrcpp      0.2.2   2018-03-29 [1] CRAN (R 3.5.0)                     
+    ##  callr         3.0.0   2018-08-24 [1] CRAN (R 3.5.1)                     
+    ##  cli           1.0.1   2018-09-25 [1] CRAN (R 3.5.1)                     
+    ##  crayon        1.3.4   2018-06-08 [1] Github (gaborcsardi/crayon@3e751fb)
+    ##  debugme       1.1.0   2017-10-22 [1] CRAN (R 3.5.0)                     
+    ##  desc          1.2.0   2018-05-01 [1] CRAN (R 3.5.0)                     
+    ##  devtools      2.0.0   2018-10-19 [1] CRAN (R 3.5.1)                     
+    ##  digest        0.6.18  2018-10-10 [1] CRAN (R 3.5.1)                     
+    ##  dplyr       * 0.7.7   2018-10-16 [1] CRAN (R 3.5.1)                     
+    ##  evaluate      0.12    2018-10-09 [1] CRAN (R 3.5.1)                     
+    ##  fs            1.2.6   2018-08-23 [1] CRAN (R 3.5.1)                     
+    ##  glue          1.3.0   2018-07-17 [1] CRAN (R 3.5.1)                     
+    ##  highr         0.7     2018-06-09 [1] CRAN (R 3.5.0)                     
+    ##  hms           0.4.2   2018-03-10 [1] CRAN (R 3.5.0)                     
+    ##  htmltools     0.3.6   2017-04-28 [1] CRAN (R 3.5.0)                     
+    ##  knitr       * 1.20    2018-02-20 [1] CRAN (R 3.5.0)                     
+    ##  magrittr      1.5     2014-11-22 [1] CRAN (R 3.5.0)                     
+    ##  memoise       1.1.0   2017-04-21 [1] CRAN (R 3.5.0)                     
+    ##  pillar        1.3.0   2018-07-14 [1] CRAN (R 3.5.1)                     
+    ##  pkgbuild      1.0.2   2018-10-16 [1] CRAN (R 3.5.1)                     
+    ##  pkgconfig     2.0.2   2018-08-16 [1] CRAN (R 3.5.1)                     
+    ##  pkgload       1.0.1   2018-10-11 [1] CRAN (R 3.5.1)                     
+    ##  prettyunits   1.0.2   2015-07-13 [1] CRAN (R 3.5.0)                     
+    ##  processx      3.2.0   2018-08-16 [1] CRAN (R 3.5.1)                     
+    ##  ps            1.2.0   2018-10-16 [1] CRAN (R 3.5.1)                     
+    ##  purrr         0.2.5   2018-05-29 [1] CRAN (R 3.5.0)                     
+    ##  R.methodsS3   1.7.1   2016-02-16 [1] CRAN (R 3.5.0)                     
+    ##  R.oo          1.22.0  2018-04-22 [1] CRAN (R 3.5.0)                     
+    ##  R6            2.3.0   2018-10-04 [1] CRAN (R 3.5.1)                     
+    ##  Rcpp          0.12.19 2018-10-01 [1] CRAN (R 3.5.1)                     
+    ##  readr       * 1.1.1   2017-05-16 [1] CRAN (R 3.5.0)                     
+    ##  remotes       2.0.1   2018-10-19 [1] CRAN (R 3.5.1)                     
+    ##  rlang         0.2.2   2018-08-16 [1] CRAN (R 3.5.1)                     
+    ##  rmarkdown     1.10    2018-06-11 [1] CRAN (R 3.5.0)                     
+    ##  rprojroot     1.3-2   2018-01-03 [1] CRAN (R 3.5.0)                     
+    ##  rtf         * 0.4-13  2018-05-17 [1] CRAN (R 3.5.1)                     
+    ##  sessioninfo   1.1.0   2018-09-25 [1] CRAN (R 3.5.1)                     
+    ##  stringi       1.2.4   2018-07-20 [1] CRAN (R 3.5.1)                     
+    ##  stringr       1.3.1   2018-05-10 [1] CRAN (R 3.5.0)                     
+    ##  testthat      2.0.1   2018-10-13 [1] CRAN (R 3.5.1)                     
+    ##  tibble        1.4.2   2018-01-22 [1] CRAN (R 3.5.0)                     
+    ##  tidyselect    0.2.5   2018-10-11 [1] CRAN (R 3.5.1)                     
+    ##  usethis       1.4.0   2018-08-14 [1] CRAN (R 3.5.1)                     
+    ##  withr         2.1.2   2018-03-15 [1] CRAN (R 3.5.0)                     
+    ##  yaml          2.2.0   2018-07-25 [1] CRAN (R 3.5.1)                     
+    ## 
+    ## [1] C:/Users/mdlhs/Rlib
+    ## [2] C:/Program Files/R/R-3.5.1/library
 
 # References
 
@@ -466,6 +516,32 @@ devtools::session_info()
 
 Bae, Kyun-Seop. 2018. *BE: Bioequivalence Study Data Analysis*.
 <https://CRAN.R-project.org/package=BE>.
+
+</div>
+
+<div id="ref-fda">
+
+Center for Drug Evaluation and Research (CDER), Food and Drug
+Administration, U.S. Department of Health and Human Services. 2001.
+*Guidance for Industry Statistical Approaches to Establishing
+Bioequivalence*.
+<https://www.fda.gov/downloads/drugs/guidances/ucm070244.pdf>.
+
+</div>
+
+<div id="ref-chow">
+
+Chow, Shein-Chung, and Jen-pei Liu. 2008. *Design and Analysis of
+Bioavailability and Bioequivalence Studies (Chapman & Hall/Crc
+Biostatistics Series)*. Chapman; Hall/CRC.
+
+</div>
+
+<div id="ref-hauschke">
+
+Hauschke, Dieter, Volker Steinijans, and Iris Pigeot. 2007.
+*Bioequivalence Studies in Drug Development: Methods and Applications*.
+Wiley.
 
 </div>
 

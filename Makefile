@@ -1,4 +1,4 @@
-all: validation.pdf validation.md validation.html
+all: clean validation.pdf validation.md validation.html
 
 validation.pdf: 
 	Rscript -e "rmarkdown::render('validation.Rmd', output_format = 'bookdown::pdf_document2', output_file = 'validation.pdf', encoding = 'UTF-8')" ;\
