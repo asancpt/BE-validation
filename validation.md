@@ -1,7 +1,7 @@
 Validation of Bioequivalence Test Performed by BE R package
 ================
 Sungpil Han <shan@acp.kr>
-2018-10-23
+2018-10-24
 
 
 
@@ -194,6 +194,12 @@ URL: www.github.com/shanmdphd
 # (APPENDIX) Appendix
 
 # Raw data
+
+The concentration-time curves are ploted in Figure @ref(fig:conctime)
+and the result of noncomparmental analysis is presented in Table
+@ref(tab:rawdata).
+
+![Concentration-time curves](assets/conc-time.pdf)
 
 | SUBJ | GRP | PRD | TRT |  AUClast |    Cmax | Tmax |
 | ---: | :-- | --: | :-- | -------: | ------: | ---: |
@@ -450,7 +456,7 @@ devtools::session_info()
     ##  collate  Korean_Korea.949            
     ##  ctype    Korean_Korea.949            
     ##  tz       Asia/Seoul                  
-    ##  date     2018-10-23                  
+    ##  date     2018-10-24                  
     ## 
     ## - Packages --------------------------------------------------------------
     ##  package     * version date       lib source                             
@@ -491,7 +497,7 @@ devtools::session_info()
     ##  Rcpp          0.12.19 2018-10-01 [1] CRAN (R 3.5.1)                     
     ##  readr       * 1.1.1   2017-05-16 [1] CRAN (R 3.5.0)                     
     ##  remotes       2.0.1   2018-10-19 [1] CRAN (R 3.5.1)                     
-    ##  rlang         0.2.2   2018-08-16 [1] CRAN (R 3.5.1)                     
+    ##  rlang         0.3.0   2018-10-22 [1] CRAN (R 3.5.1)                     
     ##  rmarkdown     1.10    2018-06-11 [1] CRAN (R 3.5.0)                     
     ##  rprojroot     1.3-2   2018-01-03 [1] CRAN (R 3.5.0)                     
     ##  rtf         * 0.4-13  2018-05-17 [1] CRAN (R 3.5.1)                     
