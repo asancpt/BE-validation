@@ -1,7 +1,7 @@
 Validation of Bioequivalence Test Performed by BE R package
 ================
 Sungpil Han <shan@acp.kr>
-2018-10-24
+2018-10-29
 
 
 
@@ -11,17 +11,14 @@ To assess bioequivalence, the 90% confidence interval for the difference
 in the means of the log-transformed data should be calculated using
 appropriate methods to the study design. The antilogs (exponents) of the
 confidence limits obtained constitute the 90% confidence interval for
-the ratio of the geometric means between the T and R products. (Center
-for Drug Evaluation and Research (CDER), Food and Drug Administration,
-U.S. Department of Health and Human Services 2001; Chow and Liu 2008;
-Hauschke, Steinijans, and Pigeot 2007) To establish bioequivalence, the
-calculated confidence interval should fall within a bioequivalence
-limit, usually 80-125% for the ratio of the product averages. For
-nonreplicated crossover designs, general linear model procedures
-available in PROC GLM in SAS are preferred, although linear
-mixed-effects model procedures can also be indicated for analysis.
-(Center for Drug Evaluation and Research (CDER), Food and Drug
-Administration, U.S. Department of Health and Human Services 2001)
+the ratio of the geometric means between the T and R products. (CDER,
+FDA 2001; Chow and Liu 2008; Hauschke, Steinijans, and Pigeot 2007) To
+establish bioequivalence, the calculated confidence interval should fall
+within a bioequivalence limit, usually 80-125% for the ratio of the
+product averages. For nonreplicated crossover designs, general linear
+model procedures available in PROC GLM in SAS are preferred, although
+linear mixed-effects model procedures can also be indicated for
+analysis. (CDER, FDA 2001)
 
 `BE` R package (Bae 2018) can analyze bioequivalence study data with
 industrial strength. The current version of `BE` performs bioequivalency
@@ -54,11 +51,11 @@ The required R packages are following.
 ``` r
 library(BE)         # install.packages("BE", repos="http://r.acr.kr")
 library(dplyr)      # install.packages("dplyr")
-library(readr)      # install.packages("readr")
+library(readxl)      # install.packages("readxl")
 ```
 
-`tab_r_be_results` function uses `BE::test2x2()` and returns the 90%
-confidence interval.
+A function, `tab_r_be_results()` is a wrapper function of
+`BE::test2x2()` and returns the 90% confidence interval.
 
 ``` r
 tab_r_be_results <- function(parameter){
@@ -101,11 +98,10 @@ version file (`.csv`). It returns a data frame of 90% confidence
 interval calculated either `PROC GLM` or `PROC MIXED` in SAS.
 
 ``` r
-tab_sas_proc_results <- function(filename, skip_no, analysis_name){
-  read_lines(filename, skip = skip_no, n_max = 2) %>% 
-  paste(collapse='\n') %>% read_csv() %>% 
+tab_sas_proc_results <- function(analysis_name, skip_no){
+  read_excel('sas/sas-be-macro-results.xlsx', skip = skip_no, n_max = 2) %>% 
   mutate(Analysis = analysis_name) %>% 
-  select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
+    select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
 }
 ```
 
@@ -120,10 +116,8 @@ Table @ref(tab:tabauclast).
 ``` r
 AUClast_R_BE <- tab_r_be_results("AUClast")
 
-AUClast_proc_glm <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
-                                         skip = 206, 'SAS: PROC GLM')
-AUClast_proc_mixed <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
-                                           skip = 278, 'SAS: PROC MIXED')
+AUClast_proc_glm <- tab_sas_proc_results('SAS: PROC GLM', skip = 108)
+AUClast_proc_mixed <- tab_sas_proc_results('SAS: PROC MIXED', skip = 180)
 
 # Combine all analyses of AUClast
 AUClast_all_analyses <- bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed)
@@ -147,10 +141,8 @@ Table @ref(tab:tabcmax).
 ``` r
 Cmax_R_BE <- tab_r_be_results("Cmax")
 
-Cmax_proc_glm <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
-                                      skip = 206, 'SAS: PROC GLM')
-Cmax_proc_mixed <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
-                                        skip = 278, 'SAS: PROC MIXED')
+Cmax_proc_glm <- tab_sas_proc_results('SAS: PROC GLM', skip = 294)
+Cmax_proc_mixed <- tab_sas_proc_results('SAS: PROC MIXED', skip = 366)
 
 # Combine all analyses of Cmax
 Cmax_all_analyses <- bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed)
@@ -178,7 +170,7 @@ crossover design can be **qualified and validated** enough to acquire
 the identical results of the commercial statistical software, SAS.
 
 *Please report issues regarding validation of the R package to
-<https://github.com/asancpt/BEreport/issues>.*
+<https://github.com/asancpt/BE-validation/issues>.*
 
 -----
 
@@ -199,7 +191,7 @@ The concentration-time curves are ploted in Figure @ref(fig:conctime)
 and the result of noncomparmental analysis is presented in Table
 @ref(tab:rawdata).
 
-![Concentration-time curves](assets/conc-time.pdf)
+![Concentration-time curves of raw data (N=33)](assets/conc-time.pdf)
 
 | SUBJ | GRP | PRD | TRT |  AUClast |    Cmax | Tmax |
 | ---: | :-- | --: | :-- | -------: | ------: | ---: |
@@ -270,34 +262,21 @@ and the result of noncomparmental analysis is presented in Table
 |   36 | RT  |   1 | R   | 4669.384 |  682.87 | 3.01 |
 |   36 | RT  |   2 | T   | 3783.584 |  729.63 | 1.00 |
 
-The raw data used for analysis in R and SAS
+The raw pharmacokinetic data used for analysis in R and SAS (N=33)
 
 # SAS Scripts and results
 
 To run these scripts, the dataset `BE::NCAResult4BE` should be exported
 from R by `write.csv()`.
 
-## AUC<sub>last</sub>
-
 ``` r
-DATA BE; 
-  INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
-  INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
-  IF CMAX =< 0 THEN DELETE;
-  LNCMAX = LOG(Cmax);
-  LNAUCL = LOG(AUClast);
-
-PROC PRINT; RUN;
-
-PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
+%MACRO BETEST(DSNAME, VARNAME);
+/* PROC GLM use only complete subjects. */
+PROC GLM DATA=&DSNAME OUTSTAT=STATRES; 
   CLASS SEQ PRD TRT SUBJ;
-  MODEL LNAUCL = SEQ SUBJ(SEQ) PRD TRT;
+  MODEL &VARNAME = SEQ SUBJ(SEQ) PRD TRT;
   RANDOM SUBJ(SEQ)/TEST;
   LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
-RUN;
-
-PROC PRINT DATA=STATRES; RUN;
-PROC PRINT DATA=LSOUT; RUN;
 
 DATA STATRES;
   SET STATRES;
@@ -322,16 +301,15 @@ DATA LSOUT2;
   LL = EXP(LNLL);
   UL = EXP(LNUL);
   WD = UL - LL;
-
 PROC PRINT DATA=LSOUT2; RUN;
 
-PROC MIXED DATA=BE; /* MIXED  uses all data. */
+/* PROC MIXED  uses all data. */
+PROC MIXED DATA=&DSNAME; 
   CLASS SEQ TRT SUBJ PRD;
-  MODEL LNAUCL = SEQ PRD TRT;
+  MODEL &VARNAME = SEQ PRD TRT;
   RANDOM SUBJ(SEQ);
   ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1; 
   ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
-RUN;
 
 DATA COVPAR;
   SET COVPAR;
@@ -345,9 +323,24 @@ DATA ESTIM;
   LL = EXP(Lower);
   UL = EXP(Upper);
   WD = UL - LL;
-
 PROC PRINT Data=ESTIM; RUN;
+
+%MEND BETEST;
+
+DATA PKDATA; 
+  INFILE 'c:\Users\mdlhs\asancpt\BE-validation\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
+  INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
+  IF CMAX =< 0 THEN DELETE;
+  LNAUCL = LOG(AUClast);
+  LNCMAX = LOG(Cmax);
+
+*BE Test ;
+
+%BETEST(PKDATA, LNAUCL);
+%BETEST(PKDATA, LNCMAX);
 ```
+
+## AUC<sub>last</sub>
 
 | Source           | DF | Type III SS | Mean Square | F Value | Pr \> F |
 | :--------------- | -: | ----------: | ----------: | ------: | ------: |
@@ -356,79 +349,10 @@ PROC PRINT Data=ESTIM; RUN;
 | TRT              |  1 |   0.0364350 |   0.0364350 |    1.29 |  0.2646 |
 | Error: MS(Error) | 31 |   0.8749020 |   0.0282230 |         |         |
 
-Table of analysis of variance for log-transformed AUClast (PROC GLM)
+Table of analysis of variance for log-transformed AUClast (PROC
+GLM)
 
 ## C<sub>max</sub>
-
-``` r
-DATA BE; 
-  INFILE 'c:\Users\mdlhs\asancpt\BEreport\sas\NCAResult4BE.csv' FIRSTOBS=2 DLM=",";
-  INPUT SUBJ $ SEQ $ PRD $ TRT $ AUClast Cmax Tmax;
-  IF CMAX =< 0 THEN DELETE;
-  LNCMAX = LOG(Cmax);
-  LNAUCL = LOG(AUClast);
-
-PROC PRINT; RUN;
-
-PROC GLM DATA=BE OUTSTAT=STATRES; /* GLM use only complete subjects. */
-  CLASS SEQ PRD TRT SUBJ;
-  MODEL LNCMAX = SEQ SUBJ(SEQ) PRD TRT;
-  RANDOM SUBJ(SEQ)/TEST;
-  LSMEANS TRT /PDIFF=CONTROL('R') CL ALPHA=0.1 COV OUT=LSOUT;
-RUN;
-
-PROC PRINT DATA=STATRES; RUN;
-PROC PRINT DATA=LSOUT; RUN;
-
-DATA STATRES;
-  SET STATRES;
-  IF _TYPE_='ERROR' THEN CALL SYMPUT('DF', DF);
-
-DATA LSOUT;
-  SET LSOUT;
-  IF TRT='R' THEN CALL SYMPUT('GMR_R', LSMEAN);
-  IF TRT='T' THEN CALL SYMPUT('GMR_T', LSMEAN);
-  IF TRT='R' THEN CALL SYMPUT('V_R', COV1);
-  IF TRT='T' THEN CALL SYMPUT('V_T', COV2);
-  IF TRT='T' THEN CALL SYMPUT('COV', COV1);
-
-DATA LSOUT2;
-  LNPE = &GMR_T - &GMR_R;
-  DF = &DF;
-  SE = SQRT(&V_R + &V_T - 2*&COV);
-  LNLM = TINV(0.95, DF)*SE;
-  LNLL = LNPE - LNLM ;
-  LNUL = LNPE + LNLM;
-  PE = EXP(LNPE);
-  LL = EXP(LNLL);
-  UL = EXP(LNUL);
-  WD = UL - LL;
-
-PROC PRINT DATA=LSOUT2; RUN;
-
-PROC MIXED DATA=BE; /* MIXED  uses all data. */
-  CLASS SEQ TRT SUBJ PRD;
-  MODEL LNCMAX = SEQ PRD TRT;
-  RANDOM SUBJ(SEQ);
-  ESTIMATE 'T VS R' TRT -1 1 /CL ALPHA=0.1; 
-  ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
-RUN;
-
-DATA COVPAR;
-  SET COVPAR;
-  IF CovParm = 'Residual' THEN CALL SYMPUT('MSE', Estimate);
-
-DATA ESTIM;
-  SET ESTIM;
-  MSE = &MSE;
-  LNLM = (Upper - Lower)/2;
-  PE = EXP(Estimate);
-  LL = EXP(Lower);
-  UL = EXP(Upper);
-  WD = UL - LL;
-
-PROC PRINT Data=ESTIM; RUN;
-```
 
 | Source           | DF | Type III SS | Mean Square | F Value | Pr \> F |
 | :--------------- | -: | ----------: | ----------: | ------: | ------: |
@@ -456,7 +380,7 @@ devtools::session_info()
     ##  collate  Korean_Korea.949            
     ##  ctype    Korean_Korea.949            
     ##  tz       Asia/Seoul                  
-    ##  date     2018-10-24                  
+    ##  date     2018-10-29                  
     ## 
     ## - Packages --------------------------------------------------------------
     ##  package     * version date       lib source                             
@@ -467,18 +391,18 @@ devtools::session_info()
     ##  bindr         0.1.1   2018-03-13 [1] CRAN (R 3.5.0)                     
     ##  bindrcpp      0.2.2   2018-03-29 [1] CRAN (R 3.5.0)                     
     ##  callr         3.0.0   2018-08-24 [1] CRAN (R 3.5.1)                     
+    ##  cellranger    1.1.0   2016-07-27 [1] CRAN (R 3.5.0)                     
     ##  cli           1.0.1   2018-09-25 [1] CRAN (R 3.5.1)                     
-    ##  crayon        1.3.4   2018-06-08 [1] Github (gaborcsardi/crayon@3e751fb)
+    ##  crayon        1.3.4   2018-10-25 [1] Github (gaborcsardi/crayon@467939b)
     ##  debugme       1.1.0   2017-10-22 [1] CRAN (R 3.5.0)                     
     ##  desc          1.2.0   2018-05-01 [1] CRAN (R 3.5.0)                     
-    ##  devtools      2.0.0   2018-10-19 [1] CRAN (R 3.5.1)                     
+    ##  devtools      2.0.1   2018-10-26 [1] CRAN (R 3.5.1)                     
     ##  digest        0.6.18  2018-10-10 [1] CRAN (R 3.5.1)                     
     ##  dplyr       * 0.7.7   2018-10-16 [1] CRAN (R 3.5.1)                     
     ##  evaluate      0.12    2018-10-09 [1] CRAN (R 3.5.1)                     
     ##  fs            1.2.6   2018-08-23 [1] CRAN (R 3.5.1)                     
     ##  glue          1.3.0   2018-07-17 [1] CRAN (R 3.5.1)                     
     ##  highr         0.7     2018-06-09 [1] CRAN (R 3.5.0)                     
-    ##  hms           0.4.2   2018-03-10 [1] CRAN (R 3.5.0)                     
     ##  htmltools     0.3.6   2017-04-28 [1] CRAN (R 3.5.0)                     
     ##  knitr       * 1.20    2018-02-20 [1] CRAN (R 3.5.0)                     
     ##  magrittr      1.5     2014-11-22 [1] CRAN (R 3.5.0)                     
@@ -495,9 +419,9 @@ devtools::session_info()
     ##  R.oo          1.22.0  2018-04-22 [1] CRAN (R 3.5.0)                     
     ##  R6            2.3.0   2018-10-04 [1] CRAN (R 3.5.1)                     
     ##  Rcpp          0.12.19 2018-10-01 [1] CRAN (R 3.5.1)                     
-    ##  readr       * 1.1.1   2017-05-16 [1] CRAN (R 3.5.0)                     
+    ##  readxl      * 1.1.0   2018-04-20 [1] CRAN (R 3.5.0)                     
     ##  remotes       2.0.1   2018-10-19 [1] CRAN (R 3.5.1)                     
-    ##  rlang         0.3.0   2018-10-22 [1] CRAN (R 3.5.1)                     
+    ##  rlang         0.3.0.1 2018-10-25 [1] CRAN (R 3.5.1)                     
     ##  rmarkdown     1.10    2018-06-11 [1] CRAN (R 3.5.0)                     
     ##  rprojroot     1.3-2   2018-01-03 [1] CRAN (R 3.5.0)                     
     ##  rtf         * 0.4-13  2018-05-17 [1] CRAN (R 3.5.1)                     
@@ -527,10 +451,8 @@ Bae, Kyun-Seop. 2018. *BE: Bioequivalence Study Data Analysis*.
 
 <div id="ref-fda">
 
-Center for Drug Evaluation and Research (CDER), Food and Drug
-Administration, U.S. Department of Health and Human Services. 2001.
-*Guidance for Industry Statistical Approaches to Establishing
-Bioequivalence*.
+CDER, FDA. 2001. *Guidance for Industry Statistical Approaches to
+Establishing Bioequivalence*.
 <https://www.fda.gov/downloads/drugs/guidances/ucm070244.pdf>.
 
 </div>

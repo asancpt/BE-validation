@@ -49,10 +49,10 @@ The required R packages are following.
 ```{r setup, message = FALSE}
 library(BE)         # install.packages("BE", repos="http://r.acr.kr")
 library(dplyr)      # install.packages("dplyr")
-library(readr)      # install.packages("readr")
+library(readxl)      # install.packages("readxl")
 ```
 
-`tab_r_be_results` function uses `BE::test2x2()` and returns the 90% confidence interval.
+A function, `tab_r_be_results()` is a wrapper function of `BE::test2x2()` and returns the 90% confidence interval.
 
 ```{r}
 tab_r_be_results <- function(parameter){
@@ -90,11 +90,10 @@ ODS OUTPUT ESTIMATES=ESTIM COVPARMS=COVPAR;
 A function, `tab_sas_proc_results()` reads SAS analysis results exported to Microsoft Excel files (`.xls`) and converted to comma separated version file (`.csv`). It returns a data frame of 90% confidence interval calculated either `PROC GLM` or `PROC MIXED` in SAS.
 
 ```{r}
-tab_sas_proc_results <- function(filename, skip_no, analysis_name){
-  read_lines(filename, skip = skip_no, n_max = 2) %>% 
-  paste(collapse='\n') %>% read_csv() %>% 
+tab_sas_proc_results <- function(analysis_name, skip_no){
+  read_excel('sas/sas-be-macro-results.xlsx', skip = skip_no, n_max = 2) %>% 
   mutate(Analysis = analysis_name) %>% 
-  select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
+    select(Analysis, `Lower Limit` = LL, `Point Estimate` = PE, `Upper Limit` = UL)
 }
 ```
 
@@ -109,10 +108,8 @@ Comparison of 90% confidence interval for the ratio of the geometric means of AU
 ```{r}
 AUClast_R_BE <- tab_r_be_results("AUClast")
 
-AUClast_proc_glm <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
-                                         skip = 206, 'SAS: PROC GLM')
-AUClast_proc_mixed <- tab_sas_proc_results('sas/SAS_results_AUClast.csv', 
-                                           skip = 278, 'SAS: PROC MIXED')
+AUClast_proc_glm <- tab_sas_proc_results('SAS: PROC GLM', skip = 108)
+AUClast_proc_mixed <- tab_sas_proc_results('SAS: PROC MIXED', skip = 180)
 
 # Combine all analyses of AUClast
 AUClast_all_analyses <- bind_rows(AUClast_R_BE, AUClast_proc_glm, AUClast_proc_mixed)
@@ -131,10 +128,8 @@ Comparison of 90% confidence interval for the ratio of the geometric means of AU
 ```{r }
 Cmax_R_BE <- tab_r_be_results("Cmax")
 
-Cmax_proc_glm <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
-                                      skip = 206, 'SAS: PROC GLM')
-Cmax_proc_mixed <- tab_sas_proc_results('sas/SAS_results_Cmax.csv', 
-                                        skip = 278, 'SAS: PROC MIXED')
+Cmax_proc_glm <- tab_sas_proc_results('SAS: PROC GLM', skip = 294)
+Cmax_proc_mixed <- tab_sas_proc_results('SAS: PROC MIXED', skip = 366)
 
 # Combine all analyses of Cmax
 Cmax_all_analyses <- bind_rows(Cmax_R_BE, Cmax_proc_glm, Cmax_proc_mixed)
@@ -154,7 +149,7 @@ We also performed multiple analyses with the actual clinical trial datasets and 
 
 Bioequivalence tests performed by the open-source `BE` R package for the conventional two-treatment, two-period, two-sequence (2x2) randomized crossover design can be **qualified and validated** enough to acquire the identical results of the commercial statistical software, SAS.
 
-*Please report issues regarding validation of the R package to <https://github.com/asancpt/BEreport/issues>.*
+*Please report issues regarding validation of the R package to <https://github.com/asancpt/BE-validation/issues>.*
 
 -----
 
@@ -175,13 +170,13 @@ URL: www.github.com/shanmdphd
 
 The concentration-time curves are ploted in Figure \@ref(fig:conctime) and the result of noncomparmental analysis is presented in Table \@ref(tab:rawdata).
 
-```{r conctime, echo = FALSE, fig.cap = 'Concentration-time curves'}
+```{r conctime, echo = FALSE, fig.cap = 'Concentration-time curves of raw data (N=33)'}
 knitr::include_graphics('assets/conc-time.pdf')
 ```
 
 ```{r rawdata, echo = FALSE}
 kable(BE::NCAResult4BE, 
-      caption = 'The raw data used for analysis in R and SAS', 
+      caption = 'The raw pharmacokinetic data used for analysis in R and SAS (N=33)', 
       longtable = TRUE, booktabs = TRUE)
 ```
 
@@ -189,13 +184,14 @@ kable(BE::NCAResult4BE,
 
 To run these scripts, the dataset `BE::NCAResult4BE` should be exported from R by `write.csv()`.
 
-## AUC~last~
 
-```{r, code = readLines('sas/sas-be-auclast.sas'), eval = FALSE}
+```{r, code = readLines('sas/sas-be-macro.sas'), eval = FALSE}
 ```
 
+## AUC~last~
+
 ```{r echo = FALSE}
-read_csv('sas/SAS_results_AUClast.csv', skip=143, n_max = 4) %>% 
+read_excel('sas/sas-be-macro-results.xlsx', skip=70, n_max=4) %>% 
   select(1:6) %>% 
   knitr::kable(longtable = TRUE, booktabs = TRUE, 
                caption = 'Table of analysis of variance for log-transformed AUClast (PROC GLM)') 
@@ -203,11 +199,8 @@ read_csv('sas/SAS_results_AUClast.csv', skip=143, n_max = 4) %>%
 
 ## C~max~
 
-```{r, code = readLines('sas/sas-be-cmax.sas'), eval = FALSE}
-```
-
 ```{r echo = FALSE}
-read_csv('sas/SAS_results_Cmax.csv', skip=143, n_max = 4) %>% 
+read_excel('sas/sas-be-macro-results.xlsx', skip=256, n_max=4) %>% 
   select(1:6) %>% 
   knitr::kable(longtable = TRUE, booktabs = TRUE, 
                caption = 'Table of analysis of variance for log-transformed Cmax (PROC GLM)') 
@@ -226,35 +219,5 @@ devtools::session_info()
 ```{r include = FALSE}
 library(BE)
 knitr::write_bib(file = 'packages.bib')
-```
-
-```{r, eval = FALSE, include = FALSE}
-BE::test2x2(BE::NCAResult4BE, "Cmax")
-
-anova_be <- BE::test2x2(NCAResult4BE, "Cmax")[[1]] %>% 
-  as.data.frame() %>% 
-  mutate(Source = row.names(.)) %>% 
-  select(Source, SS, DF, F) %>% 
-  gather(parameter, value, -Source) %>% 
-  mutate_at(vars(value), funs(round), 5)
-  
-anova_sas <- read_lines('sas/SAS_results_Cmax.csv', skip = 181, n_max = 10) %>% 
-  paste(collapse = '\n') %>% 
-  read_csv() %>% 
-  rename(Name=2, Source=3, Type=4) %>% 
-  filter(Type %in% c('SS3', 'ERROR')) %>% 
-  select(Source, SS, DF, F) %>% 
-  mutate(Source = case_when(
-    Source == 'SEQ' ~ 'GROUP',
-    Source == 'SUBJ(SEQ)' ~ 'SUBJECT(GROUP)',
-    Source == 'PRD' ~ 'PERIOD',
-    Source == 'TRT' ~ 'DRUG',
-    TRUE ~ Source
-    )) %>% 
-  gather(parameter, value, -Source) %>% 
-  mutate_at(vars(value), ~ as.numeric(.x) %>% round(5)) %>% 
-  print()
-
-left_join(anova_be, anova_sas, by = c('Source', 'parameter'))
 ```
 
